@@ -1,0 +1,16 @@
+{
+  "name": "gainr-ipfs-upload",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "upload": "node index.js"
+  },
+  "author": "GAINr Team",
+  "license": "MIT",
+  "description": "Upload GAINr token metadata to IPFS",
+  "dependencies": {
+    "dotenv": "^16.3.1"
+  }
+}

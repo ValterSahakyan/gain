@@ -1,0 +1,31 @@
+{
+  "name": "token-sale",
+  "version": "1.0.0",
+  "description": "Solana Token Sale Program",
+  "main": "index.js",
+  "scripts": {
+    "build": "anchor build",
+    "deploy": "anchor deploy",
+    "test": "anchor test",
+    "clean": "anchor clean",
+    "init": "node scripts/initialize.js",
+    "buy": "node scripts/test_buy.js"
+  },
+  "keywords": [
+    "solana",
+    "anchor",
+    "token",
+    "sale"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.31.1",
+    "@metaplex-foundation/mpl-token-metadata": "^3.4.0",
+    "@solana/spl-token": "^0.4.14",
+    "@solana/web3.js": "^1.98.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0"
+  }
+}
