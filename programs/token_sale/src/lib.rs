@@ -17,7 +17,6 @@ pub struct TokenPurchasedWithSol {
     pub timestamp: i64,
     pub payment_method: String,
     pub tier: String,
-    pub round: u8,
 }
 
 #[event]
@@ -30,51 +29,16 @@ pub struct TokenPurchasedWithEurc {
     pub timestamp: i64,
     pub payment_method: String,
     pub tier: String,
-    pub round: u8,
 }
-
-// Round configuration
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq)]
-pub enum Round {
-    First = 1,  // 10% cheaper than third round
-    Second = 2, // 5% cheaper than third round  
-    Third = 3,  // Base prices
-}
-
-impl Round {
-    pub fn get_discount_multiplier(&self) -> f64 {
-        match self {
-            Round::First => 0.90,  // 10% cheaper = 90% of base price
-            Round::Second => 0.95, // 5% cheaper = 95% of base price
-            Round::Third => 1.00,  // Base price = 100%
-        }
+// Tiered pricing calculation
+pub fn get_eurc_price_per_token(amount: u64) -> u64 {
+    match amount {
+        a if a < 1000 => 261_000,    // 0.261 EURC
+        a if a < 5000 => 252_000,    // 0.252 EURC  
+        a if a < 10000 => 243_000,   // 0.243 EURC
+        a if a < 25000 => 216_000,   // 0.216 EURC
+        _ => 162_000,                // 0.162 EURC
     }
-}
-
-// Base prices for third round (in EURC lamports - 6 decimals)
-const BASE_PRICE_TIER_1: u64 = 290_000;    // 0.290 EURC
-const BASE_PRICE_TIER_2: u64 = 280_000;    // 0.280 EURC
-const BASE_PRICE_TIER_3: u64 = 270_000;    // 0.270 EURC
-const BASE_PRICE_TIER_4: u64 = 240_000;    // 0.240 EURC
-const BASE_PRICE_TIER_5: u64 = 180_000;    // 0.180 EURC
-
-const TOKENS_PER_ROUND: u64 = 1_000_000; // 1 million tokens per round
-
-// Tiered pricing calculation with round discounts
-pub fn get_eurc_price_per_token(amount: u64, round: Round) -> u64 {
-    let base_price = match amount {
-        a if a < 1000 => BASE_PRICE_TIER_1,
-        a if a < 5000 => BASE_PRICE_TIER_2,
-        a if a < 10000 => BASE_PRICE_TIER_3,
-        a if a < 25000 => BASE_PRICE_TIER_4,
-        _ => BASE_PRICE_TIER_5,
-    };
-    
-    // Apply round discount
-    let discount_multiplier = round.get_discount_multiplier();
-    let discounted_price = (base_price as f64 * discount_multiplier) as u64;
-    
-    discounted_price
 }
 
 // Get tier name for events
@@ -86,72 +50,6 @@ pub fn get_tier_name(amount: u64) -> String {
         a if a < 25000 => "Tier 4 (10K-25K)".to_string(),
         _ => "Tier 5 (25K+)".to_string(),
     }
-}
-
-// Get current round based on sale start time and round duration
-pub fn get_current_round(config: &Config) -> Result<Round> {
-    let current_time = Clock::get()?.unix_timestamp;
-    let round_duration: i64 = 30 * 24 * 60 * 60; // 30 days in seconds
-    
-    let elapsed_time = current_time - config.sale_start_time;
-    
-    if elapsed_time < round_duration {
-        Ok(Round::First)
-    } else if elapsed_time < round_duration * 2 {
-        Ok(Round::Second)
-    } else if elapsed_time < round_duration * 3 {
-        Ok(Round::Third)
-    } else {
-        // Sale ended after 90 days
-        err!(ErrorCode::SaleEnded)
-    }
-}
-
-// Check if purchase exceeds round limit
-pub fn check_round_limit(config: &Config, amount: u64) -> Result<()> {
-    let current_round = get_current_round(config)?;
-    let round_tokens_sold = get_round_tokens_sold(config, current_round);
-    
-    let remaining_tokens = TOKENS_PER_ROUND.checked_sub(round_tokens_sold)
-        .ok_or(ErrorCode::Overflow)?;
-    
-    require!(
-        amount <= remaining_tokens,
-        ErrorCode::RoundLimitExceeded
-    );
-    
-    Ok(())
-}
-
-// Get tokens sold in a specific round
-pub fn get_round_tokens_sold(config: &Config, round: Round) -> u64 {
-    match round {
-        Round::First => config.round1_tokens_sold,
-        Round::Second => config.round2_tokens_sold,
-        Round::Third => config.round3_tokens_sold,
-    }
-}
-
-// Update tokens sold for a round
-pub fn update_round_tokens_sold(config: &mut Config, round: Round, amount: u64) -> Result<()> {
-    match round {
-        Round::First => {
-            config.round1_tokens_sold = config.round1_tokens_sold
-                .checked_add(amount)
-                .ok_or(ErrorCode::Overflow)?;
-        }
-        Round::Second => {
-            config.round2_tokens_sold = config.round2_tokens_sold
-                .checked_add(amount)
-                .ok_or(ErrorCode::Overflow)?;
-        }
-        Round::Third => {
-            config.round3_tokens_sold = config.round3_tokens_sold
-                .checked_add(amount)
-                .ok_or(ErrorCode::Overflow)?;
-        }
-    }
-    Ok(())
 }
 
 #[program]
@@ -167,18 +65,8 @@ pub mod simple_token_sale {
         config.paused = false;
         config.initialized = true;
         config.bump = ctx.bumps.config;
-        config.sale_start_time = Clock::get()?.unix_timestamp;
-        
-        // Initialize round counters
-        config.round1_tokens_sold = 0;
-        config.round2_tokens_sold = 0;
-        config.round3_tokens_sold = 0;
 
-        msg!("✅ Token sale initialized with 3 rounds (90 days total)");
-        msg!("🎯 Round 1: 30 days - 10% discount - 1M tokens");
-        msg!("🎯 Round 2: 30 days - 5% discount - 1M tokens"); 
-        msg!("🎯 Round 3: 30 days - Base price - 1M tokens");
-        msg!("💰 Total sale: 3M tokens");
+        msg!("✅ Token sale initialized");
         Ok(())
     }
 
@@ -203,11 +91,6 @@ pub mod simple_token_sale {
         require!(config.initialized, ErrorCode::NotInitialized);
         require!(!config.paused, ErrorCode::SalePaused);
         require!(amount > 0, ErrorCode::InvalidAmount);
-    
-        let current_round = get_current_round(config)?;
-        
-        // Check round limit
-        check_round_limit(config, amount)?;
         
         let total_price = amount
             .checked_mul(config.price_lamports_per_token)
@@ -247,9 +130,6 @@ pub mod simple_token_sale {
             
         token22::mint_to(cpi_ctx, base_units)?;
         
-        // Update round tokens sold
-        update_round_tokens_sold(config, current_round, amount)?;
-        
         emit!(TokenPurchasedWithSol {
             buyer: ctx.accounts.buyer.key(),
             token_amount: amount,
@@ -258,11 +138,9 @@ pub mod simple_token_sale {
             timestamp: Clock::get()?.unix_timestamp,
             payment_method: "SOL".to_string(),
             tier: get_tier_name(amount),
-            round: current_round as u8,
         });
         
-        let remaining = TOKENS_PER_ROUND - get_round_tokens_sold(config, current_round);
-        msg!("✅ Purchase successful! Round: {:?}, Remaining: {} tokens", current_round, remaining);
+        msg!("✅ Purchase successful!");
         Ok(())
     }
 
@@ -285,19 +163,11 @@ pub mod simple_token_sale {
         require!(!config.paused, ErrorCode::SalePaused);
         require!(amount > 0, ErrorCode::InvalidAmount);
 
-        let current_round = get_current_round(config)?;
-
-        // Check round limit
-        check_round_limit(config, amount)?;
-
         // Calculate EURC price based on tiers and current round
-        let eurc_per_token = get_eurc_price_per_token(amount, current_round);
+        let eurc_per_token = get_eurc_price_per_token(amount);
         let total_eurc_price = amount
             .checked_mul(eurc_per_token)
             .ok_or(ErrorCode::Overflow)?;
-
-        msg!("🛒 Buying {} tokens for {} EURC ({} EURC/token) - Round: {:?}", 
-             amount, total_eurc_price, eurc_per_token, current_round);
 
         // Transfer EURC from buyer to treasury
         let cpi_accounts = Transfer {
@@ -337,9 +207,6 @@ pub mod simple_token_sale {
 
         token22::mint_to(mint_cpi_ctx, base_units)?;
 
-        // Update round tokens sold
-        update_round_tokens_sold(config, current_round, amount)?;
-
         // EMIT EVENT
         emit!(TokenPurchasedWithEurc {
             buyer: ctx.accounts.buyer.key(),
@@ -350,103 +217,13 @@ pub mod simple_token_sale {
             timestamp: Clock::get()?.unix_timestamp,
             payment_method: "EURC".to_string(),
             tier: get_tier_name(amount),
-            round: current_round as u8,
         });
 
-        let remaining = TOKENS_PER_ROUND - get_round_tokens_sold(config, current_round);
-        msg!("✅ EURC purchase successful! {} tokens at round: {:?}, tier: {}, remaining: {} tokens", 
-             amount, current_round, get_tier_name(amount), remaining);
+        msg!("✅ EURC purchase successful! {} tokens minted at tier: {}", 
+             amount, get_tier_name(amount));
         Ok(())
     }
 
-    // Add function to get current round info
-    pub fn get_round_info(ctx: Context<GetRoundInfo>) -> Result<RoundInfo> {
-        let config = &ctx.accounts.config;
-        let current_round = get_current_round(config)?;
-        let current_time = Clock::get()?.unix_timestamp;
-        let round_duration: i64 = 30 * 24 * 60 * 60;
-        
-        let round_start = config.sale_start_time + ((current_round as i64 - 1) * round_duration);
-        let round_end = round_start + round_duration;
-        let round_tokens_sold = get_round_tokens_sold(config, current_round);
-        let remaining_tokens = TOKENS_PER_ROUND.checked_sub(round_tokens_sold).unwrap_or(0);
-        
-        Ok(RoundInfo {
-            current_round: current_round as u8,
-            round_start_time: round_start,
-            round_end_time: round_end,
-            sale_start_time: config.sale_start_time,
-            total_duration: round_duration * 3,
-            round_tokens_sold,
-            remaining_tokens,
-            tokens_per_round: TOKENS_PER_ROUND,
-        })
-    }
-
-    // Add function to get all rounds info
-    pub fn get_all_rounds_info(ctx: Context<GetRoundInfo>) -> Result<AllRoundsInfo> {
-        let config = &ctx.accounts.config;
-        
-        Ok(AllRoundsInfo {
-            round1: RoundDetails {
-                tokens_sold: config.round1_tokens_sold,
-                remaining: TOKENS_PER_ROUND.checked_sub(config.round1_tokens_sold).unwrap_or(0),
-                total: TOKENS_PER_ROUND,
-            },
-            round2: RoundDetails {
-                tokens_sold: config.round2_tokens_sold,
-                remaining: TOKENS_PER_ROUND.checked_sub(config.round2_tokens_sold).unwrap_or(0),
-                total: TOKENS_PER_ROUND,
-            },
-            round3: RoundDetails {
-                tokens_sold: config.round3_tokens_sold,
-                remaining: TOKENS_PER_ROUND.checked_sub(config.round3_tokens_sold).unwrap_or(0),
-                total: TOKENS_PER_ROUND,
-            },
-            total_tokens_sold: config.round1_tokens_sold
-                .checked_add(config.round2_tokens_sold)
-                .and_then(|sum| sum.checked_add(config.round3_tokens_sold))
-                .unwrap_or(0),
-            total_tokens: TOKENS_PER_ROUND * 3,
-        })
-    }
-}
-
-// Add new account for round info
-#[derive(Accounts)]
-pub struct GetRoundInfo<'info> {
-    #[account(seeds = [b"token_sale_config"], bump = config.bump)]
-    pub config: Account<'info, Config>,
-}
-
-// Add RoundInfo struct for returning round information
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
-pub struct RoundInfo {
-    pub current_round: u8,
-    pub round_start_time: i64,
-    pub round_end_time: i64,
-    pub sale_start_time: i64,
-    pub total_duration: i64,
-    pub round_tokens_sold: u64,
-    pub remaining_tokens: u64,
-    pub tokens_per_round: u64,
-}
-
-// Add struct for all rounds information
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
-pub struct AllRoundsInfo {
-    pub round1: RoundDetails,
-    pub round2: RoundDetails,
-    pub round3: RoundDetails,
-    pub total_tokens_sold: u64,
-    pub total_tokens: u64,
-}
-
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
-pub struct RoundDetails {
-    pub tokens_sold: u64,
-    pub remaining: u64,
-    pub total: u64,
 }
 
 #[derive(Accounts)]
@@ -647,14 +424,10 @@ pub struct Config {
     pub price_lamports_per_token: u64,
     pub paused: bool,
     pub bump: u8,
-    pub sale_start_time: i64,
-    pub round1_tokens_sold: u64, // Tokens sold in round 1
-    pub round2_tokens_sold: u64, // Tokens sold in round 2
-    pub round3_tokens_sold: u64, // Tokens sold in round 3
 }
 
 impl Config {
-    pub const SIZE: usize = 1 + 32 + 32 + 32 + 8 + 1 + 1 + 8 + 8 + 8 + 8;
+    pub const SIZE: usize = 1 + 32 + 32 + 32 + 8 + 1 + 1 + 8;
 }
 
 #[error_code]
@@ -677,6 +450,4 @@ pub enum ErrorCode {
     InsufficientPayment,
     #[msg("Sale has ended")]
     SaleEnded,
-    #[msg("Round limit exceeded")]
-    RoundLimitExceeded,
 }
