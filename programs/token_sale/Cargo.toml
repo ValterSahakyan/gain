@@ -11,6 +11,8 @@ name = "token_sale"
 [dependencies]
 anchor-lang = { version = "0.31.1", features = [ "init-if-needed" ] }
 anchor-spl = "0.31.1"
+sha2 = "0.10"
+pyth_sdk_solana = { git = "https://github.com/pyth-network/pyth-sdk-rs", package = "pyth-sdk-solana" }
 
 [features]
 no-entrypoint = []

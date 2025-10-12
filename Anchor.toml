@@ -3,7 +3,7 @@ cluster = "devnet"
 wallet = "~/.config/solana/id.json"
 
 [programs.devnet]
-token_sale = "6ZK4hFGen61b83NHsNTAMq71r3QJCTwknvj4CYfLxdBj"
+token_sale = "Bv8sK4AN9bTrcLfH8zvCs8yiScbQZtT8nnss5uEticDe"
 
 [workspace]
 members = [
