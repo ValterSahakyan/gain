@@ -21,7 +21,8 @@ pub const PYTH_SOL_USD_MAINNET: Pubkey = Pubkey::new_from_array([
     0x9c, 0x8e, 0x8f, 0x1a, 0x3c, 0x7a, 0x7f, 0x8d,
     0x1f, 0x8a, 0x2c, 0x9c, 0x8e, 0x8f, 0x1a, 0x3c,
 ]);
-
+pub const USDC_MINT: Pubkey = pubkey!("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"); // Mainnet USDC
+pub const EURC_MINT: Pubkey = pubkey!("HzwqbKZw8HxMN6bF2yFZNrht3c2iXXzpKcFu7uBEDKtr"); // Mainnet EURC
 // Account structs
 #[derive(Accounts)]
 pub struct Buy<'info> {
@@ -97,6 +98,9 @@ pub struct BuyWithEurc<'info> {
     pub mint: InterfaceAccount<'info, Mint>,
 
     /// CHECK: EURC mint address (fixed for EURC)
+    #[account(
+        address = EURC_MINT @ ErrorCode::InvalidEurcMint
+    )]
     pub eurc_mint: InterfaceAccount<'info, Mint>,
 
     /// CHECK: Mint authority PDA
@@ -155,6 +159,9 @@ pub struct BuyWithUsdc<'info> {
     pub mint: InterfaceAccount<'info, Mint>,
 
     /// CHECK: USDC mint address (fixed for USDC)
+    #[account(
+        address = USDC_MINT @ ErrorCode::InvalidUsdcMint
+    )]
     pub usdc_mint: InterfaceAccount<'info, Mint>,
 
     /// CHECK: Mint authority PDA

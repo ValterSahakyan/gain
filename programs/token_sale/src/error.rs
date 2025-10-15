@@ -38,4 +38,8 @@ pub enum ErrorCode {
     PythAccountNotFound,
     #[msg("Invalid Pyth account")]
     InvalidPythAccount,
+    #[msg("Invalid USDC mint address")]
+    InvalidUsdcMint,
+    #[msg("Invalid EURC mint address")]
+    InvalidEurcMint,
 }
