@@ -18,12 +18,11 @@ impl Round {
     }
 }
 
-// Base prices for third round (in lamports - 6 decimals)
-pub const BASE_PRICE_TIER_1: u64 = 290_000;    // 0.290
-pub const BASE_PRICE_TIER_2: u64 = 280_000;    // 0.280
-pub const BASE_PRICE_TIER_3: u64 = 270_000;    // 0.270
-pub const BASE_PRICE_TIER_4: u64 = 240_000;    // 0.240
-pub const BASE_PRICE_TIER_5: u64 = 180_000;    // 0.180
+// Sigmoid pricing parameters (in lamports - 6 decimals)
+pub const BASE_PRICE_MAX: u64 = 290_000;    // 0.290 EURC per token (max price for very small purchases)
+pub const BASE_PRICE_MIN: u64 = 180_000;    // 0.180 EURC per token (min price for very large purchases)
+pub const SIGMOID_MIDPOINT: f64 = 10_000.0; // 10K tokens = midpoint of discount curve
+pub const SIGMOID_STEEPNESS: f64 = 0.0003;  // Controls how quickly discount applies
 
 pub const TOKENS_PER_ROUND: u64 = 1_000_000; // 1 million tokens per round
 
@@ -46,7 +45,7 @@ pub struct Config {
 }
 
 impl Config {
-    pub const SIZE: usize = 1 + 32 + 32 + 32 + 8 + 1 + 1 + 8 + 8 + 8 + 8;
+    pub const SIZE: usize = 1 + 32 + 32 + 32 + 1 + 1 + 8 + 8 + 8 + 8;
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]

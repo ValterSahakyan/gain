@@ -241,22 +241,30 @@ pub fn _get_validated_price(_price_account: &AccountInfo) -> Result<u64> {
     // This is the original function - we're not using it anymore
     Err(error!(ErrorCode::PriceNotAvailable))
 }
+// Sigmoid pricing function
+pub fn get_sigmoid_price_per_token(amount: u64, round: Round) -> Result<u64> {
+    let amount_f64 = amount as f64;
 
-// Helper functions
-pub fn get_stablecoin_price_per_token(amount: u64, round: Round) -> u64 {
-    let base_price = match amount {
-        a if a < 1000 => BASE_PRICE_TIER_1,
-        a if a < 5000 => BASE_PRICE_TIER_2,
-        a if a < 10000 => BASE_PRICE_TIER_3,
-        a if a < 25000 => BASE_PRICE_TIER_4,
-        _ => BASE_PRICE_TIER_5,
-    };
+    // Sigmoid function: price = min + (max - min) / (1 + e^(-k*(x - midpoint)))
+    let exponent = SIGMOID_STEEPNESS * (amount_f64 - SIGMOID_MIDPOINT);
+    let denominator = 1.0 + exponent.exp();
+
+    let price_range = (BASE_PRICE_MAX - BASE_PRICE_MIN) as f64;
+    let base_price = BASE_PRICE_MIN as f64 + (price_range / denominator);
 
     // Apply round discount
     let discount_multiplier = round.get_discount_multiplier();
-    let discounted_price = (base_price as f64 * discount_multiplier) as u64;
+    let discounted_price = base_price * discount_multiplier;
 
-    discounted_price
+    // Convert back to u64 (6 decimals) with bounds checking
+    let final_price = (discounted_price.round() as u64)
+        .max(BASE_PRICE_MIN)
+        .min(BASE_PRICE_MAX);
+    Ok(final_price)
+}
+// Helper functions
+pub fn get_stablecoin_price_per_token(amount: u64, round: Round) -> u64 {
+    get_sigmoid_price_per_token(amount, round).unwrap_or(BASE_PRICE_MAX)
 }
 
 // Convert your EURC price to USDC (USDC = $1.00)

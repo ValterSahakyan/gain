@@ -30,19 +30,31 @@ pub fn set_merkle_root_handler(
     end_time: i64,
 ) -> Result<()> {
     let config = &mut ctx.accounts.config;
-    
+
+    // Check if this is a new config or update
+    let is_new_config = config.merkle_root == [0u8; 32]; // Simple check
+
     config.merkle_root = root;
     config.airdrop_amount = airdrop_amount;
     config.max_claims = max_claims;
     config.airdrop_start_time = start_time;
     config.airdrop_end_time = end_time;
-    config.total_claimed = 0;
-    config.bump = ctx.bumps.config;
-    
-    // Clear claimed list when setting new merkle root
-    config.claimed.clear();
-    
-    msg!("Airdrop configured: amount={}, max_claims={}, root={:?}", airdrop_amount, max_claims, root);
+
+    if is_new_config {
+        // Initialize for new airdrop
+        config.total_claimed = 0;
+        config.claimed = Vec::new();
+        config.bump = ctx.bumps.config;
+        msg!("New airdrop configured");
+    } else {
+        // Keep existing claimed data for updates
+        // Or reset if you want fresh start:
+        // config.total_claimed = 0;
+        // config.claimed.clear();
+        msg!("Existing airdrop updated");
+    }
+
+    msg!("Airdrop: amount={}, max_claims={}", airdrop_amount, max_claims);
     Ok(())
 }
 
@@ -172,7 +184,7 @@ pub struct SetMerkleRoot<'info> {
     pub sale_config: Account<'info, Config>,
     
     #[account(
-        init,
+        init_if_needed,
         payer = authority,
         space = 8 + AirdropConfig::INIT_SPACE,
         seeds = [b"airdrop-config"],
